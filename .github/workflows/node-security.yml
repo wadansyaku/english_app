@@ -1,0 +1,42 @@
+name: Verify Node.js security policy
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  patched-runtimes:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22.23.4', '24.22.1']
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: Verify actual runtime
+        run: node -e "console.log(process.version); if (process.versions.node !== '${{ matrix.node }}') process.exit(1)"
+      - run: npm ci
+      - run: npm run test:node-runtime
+      - run: npm run build
+      - run: npm run test:node-entrypoints -- --expect-accept --probe
+  reject-unpatched-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.15.0'
+      # Comparison only: no dependency installation, registry access, secrets,
+      # app server or production use under this unpatched runtime.
+      - name: Verify the negative-test runtime
+        run: node -e "console.log(process.version); if (process.versions.node !== '24.15.0') process.exit(1)"
+      - run: node scripts/verify-node-entrypoints.mjs --expect-reject
